@@ -180,7 +180,8 @@ function parseVideosFromReadme(readmeText) {
   }
   return items.map(i => ({
     ...i,
-    thumb: `https://img.youtube.com/vi/${new URL(i.url).searchParams.get("v")}/hqdefault.jpg`
+    thumb: `https://img.youtube.com/vi/${new URL(i.url).searchParams.get("v")}/hqdefault.jpg`,
+    date: null
   }));
 }
 
@@ -207,6 +208,7 @@ async function fetchVideos() {
       card.className = "video-card";
       card.innerHTML = `
         <img src="${v.thumb}" alt="">
+        <div class="meta">${v.date ? v.date : ""}</div>
         <div class="title">${v.title}</div>
       `;
       grid.appendChild(card);
@@ -331,11 +333,57 @@ const COUNTRY_COORDS = {
   "Latvia": [57.0, 25.0]
 };
 
+// City-level coordinates for known events (lat, lon)
+const CITY_COORDS = {
+  "London": [51.5074, -0.1278],
+  "Berlin": [52.5200, 13.4050],
+  "Munich": [48.1351, 11.5820],
+  "Hamburg": [53.5511, 9.9937],
+  "Porto": [41.1579, -8.6291],
+  "Coimbra": [40.2110, -8.4292],
+  "Lisbon": [38.7223, -9.1393],
+  "Oslo": [59.9139, 10.7522],
+  "Brussels": [50.8503, 4.3517],
+  "Amsterdam": [52.3676, 4.9041],
+  "Utrecht": [52.0907, 5.1214],
+  "Odense": [55.4038, 10.4024],
+  "Dresden": [51.0504, 13.7373],
+  "Gdańsk": [54.3520, 18.6466],
+  "Warsaw": [52.2297, 21.0122],
+  "Cluj-Napoca": [46.7712, 23.6236],
+  "Thessaloniki": [40.6401, 22.9444],
+  "Ioannina": [39.6650, 20.8537],
+  "Athens": [37.9838, 23.7275],
+  "Belgrade": [44.7866, 20.4489],
+  "Zagreb": [45.8150, 15.9819],
+  "Split": [43.5081, 16.4402],
+  "Riga": [56.9496, 24.1052],
+  "Vilnius": [54.6872, 25.2797],
+  "Verona": [45.4384, 10.9916],
+  "Rome": [41.9028, 12.4964],
+  "Tel Aviv": [32.0853, 34.7818],
+  "Sarajevo": [43.8564, 18.4131],
+  "Odessa": [46.4825, 30.7233],
+  "San Francisco": [37.7749, -122.4194],
+  "Greece": [39.0, 22.0]
+};
+
 // Convert lat/lon to position on Mercator background box
 function latLonToXY(lat, lon, width, height, offsetX=0){
   const x = ((lon + 180) / 360) * width + offsetX;
   const y = (height/2) - (height / (2*Math.PI)) * Math.log(Math.tan(Math.PI/4 + (lat*Math.PI/180)/2));
   return {x, y};
+}
+
+function findCoordsFromTitle(title){
+  for(const city in CITY_COORDS){
+    if(title.toLowerCase().includes(city.toLowerCase())){
+      return CITY_COORDS[city];
+    }
+  }
+  const country = extractCountry(title);
+  if(country && COUNTRY_COORDS[country]) return COUNTRY_COORDS[country];
+  return null;
 }
 
 function renderGlobePins(talks){
@@ -346,54 +394,98 @@ function renderGlobePins(talks){
   const w = rect.width, h = rect.height;
 
   talks.forEach((t)=>{
-    const country = extractCountry(t.title);
-    if(!country) return;
-    const coords = COUNTRY_COORDS[country];
+    const coords = findCoordsFromTitle(t.title);
     if(!coords) return;
     const {x, y} = latLonToXY(coords[0], coords[1], w, h, currentGlobeOffset);
     const pin = document.createElement("div");
     pin.className = "pin";
     pin.setAttribute("data-title", t.title);
-    pin.style.left = `${((x % w) + w) % w}px`; // wrap into [0,w)
+    pin.setAttribute("data-url", t.url);
+    pin.style.left = `${((x % w) + w) % w}px`;
     pin.style.top = `${Math.max(8, Math.min(h-8, y))}px`;
+    pin.addEventListener("click", ()=>{
+      const url = pin.getAttribute("data-url");
+      if(url) window.open(url, "_blank");
+    });
     pinsEl.appendChild(pin);
   });
 }
 
-// Drag-to-rotate globe horizontally
+// Drag-to-rotate globe horizontally with inertia
 let currentGlobeOffset = 0;
+let inertiaVelocity = 0;
+let inertiaRAF = null;
+
 function enableGlobeDrag(){
   const globeEl = document.getElementById("globe");
   let dragging = false;
   let lastX = 0;
-  globeEl.addEventListener("mousedown", (e)=>{
-    dragging = true; lastX = e.clientX;
-  });
-  window.addEventListener("mousemove", (e)=>{
+  let lastTime = 0;
+
+  function onMouseDown(e){
+    dragging = true; lastX = e.clientX; lastTime = performance.now();
+    cancelInertia();
+  }
+  function onMouseMove(e){
     if(!dragging) return;
+    const now = performance.now();
     const dx = e.clientX - lastX;
-    lastX = e.clientX;
+    const dt = now - lastTime;
+    lastX = e.clientX; lastTime = now;
     currentGlobeOffset += dx;
+    inertiaVelocity = dx / Math.max(dt, 16) * 16; // px per frame approx
     globeEl.style.backgroundPosition = `${currentGlobeOffset}px center`;
-    if(latestTalksForPins.length){
-      renderGlobePins(latestTalksForPins);
-    }
-  });
-  window.addEventListener("mouseup", ()=> dragging = false);
+    if(latestTalksForPins.length) renderGlobePins(latestTalksForPins);
+  }
+  function onMouseUp(){
+    dragging = false;
+    startInertia();
+  }
+
+  globeEl.addEventListener("mousedown", onMouseDown);
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", onMouseUp);
+
+  // Touch
   globeEl.addEventListener("touchstart", (e)=>{
-    dragging = true; lastX = e.touches[0].clientX;
+    dragging = true; lastX = e.touches[0].clientX; lastTime = performance.now();
+    cancelInertia();
   }, {passive:true});
   window.addEventListener("touchmove", (e)=>{
     if(!dragging) return;
+    const now = performance.now();
     const dx = e.touches[0].clientX - lastX;
-    lastX = e.touches[0].clientX;
+    const dt = now - lastTime;
+    lastX = e.touches[0].clientX; lastTime = now;
     currentGlobeOffset += dx;
+    inertiaVelocity = dx / Math.max(dt, 16) * 16;
     globeEl.style.backgroundPosition = `${currentGlobeOffset}px center`;
-    if(latestTalksForPins.length){
-      renderGlobePins(latestTalksForPins);
-    }
+    if(latestTalksForPins.length) renderGlobePins(latestTalksForPins);
   }, {passive:true});
-  window.addEventListener("touchend", ()=> dragging = false);
+  window.addEventListener("touchend", ()=>{
+    dragging = false;
+    startInertia();
+  });
+}
+
+function startInertia(){
+  cancelInertia();
+  const globeEl = document.getElementById("globe");
+  function step(){
+    // friction
+    inertiaVelocity *= 0.95;
+    if(Math.abs(inertiaVelocity) < 0.2){
+      cancelInertia(); return;
+    }
+    currentGlobeOffset += inertiaVelocity;
+    globeEl.style.backgroundPosition = `${currentGlobeOffset}px center`;
+    if(latestTalksForPins.length) renderGlobePins(latestTalksForPins);
+    inertiaRAF = requestAnimationFrame(step);
+  }
+  inertiaRAF = requestAnimationFrame(step);
+}
+function cancelInertia(){
+  if(inertiaRAF){ cancelAnimationFrame(inertiaRAF); inertiaRAF = null; }
 }
 
 let latestTalksForPins = [];
@@ -411,7 +503,7 @@ async function renderSpeaking() {
       container.innerHTML = "<div class='timeline-item left'>See GitHub README for full speaking list.</div>";
       return;
     }
-    const recent = talks.slice(0, 6); // show only last 6
+    const recent = talks.slice(0, 6);
     latestTalksForPins = recent;
 
     recent.forEach((t, i) => {
