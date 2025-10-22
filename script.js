@@ -160,24 +160,36 @@ async function renderAboutDetails() {
   }
 }
 
-// Parse recent videos from README or fallback to YouTube thumbnails found in README
+// Parse recent videos from README using multiple patterns
 function parseVideosFromReadme(readmeText) {
-  const sectionStart = readmeText.indexOf("Recent YouTube Videos");
-  if (sectionStart === -1) return [];
-  const slice = readmeText.slice(sectionStart, sectionStart + 8000);
-
-  const linkRegex = /\[!\[.*?\]\]\((https:\/\/www\.youtube\.com\/watch\?v=[^)\s]+)\)\s*<br>\s*\[\*\*(.*?)\*\*\]\(\1\)/g;
   const items = [];
-  let match;
-  while ((match = linkRegex.exec(slice)) && items.length < 6) {
-    items.push({
-      url: match[1],
-      title: match[2],
-      thumb: `https://img.youtube.com/vi/${new URL(match[1]).searchParams.get("v")}/hqdefault.jpg`,
-      date: null,
-    });
+  // Pattern 1: image followed by title link
+  let regex1 = /\[!\[.*?\]\]\((https:\/\/www\.youtube\.com\/watch\?v=[^)\s]+)\)\s*<br>\s*\[\*\*(.*?)\*\*\]\(\1\)/g;
+  let m1;
+  while ((m1 = regex1.exec(readmeText)) && items.length < 6) {
+    items.push({ url: m1[1], title: m1[2] });
   }
-  return items;
+  // Pattern 2: bold title directly linking to youtube
+  let regex2 = /\[\*\*(.*?)\*\*\]\((https:\/\/www\.youtube\.com\/watch\?v=[^)\s]+)\)/g;
+  let m2;
+  while ((m2 = regex2.exec(readmeText)) && items.length < 6) {
+    items.push({ url: m2[2], title: m2[1] });
+  }
+  // Pattern 3: any youtube link
+  let regex3 = /(https:\/\/www\.youtube\.com\/watch\?v=([A-Za-z0-9_-]{6,}))/g;
+  let seen = new Set(items.map(i => i.url));
+  let m3;
+  while ((m3 = regex3.exec(readmeText)) && items.length < 6) {
+    if (!seen.has(m3[1])) {
+      items.push({ url: m3[1], title: "YouTube Video" });
+      seen.add(m3[1]);
+    }
+  }
+  // Add thumbs
+  return items.map(i => ({
+    ...i,
+    thumb: `https://img.youtube.com/vi/${new URL(i.url).searchParams.get("v")}/hqdefault.jpg`
+  }));
 }
 
 async function fetchVideos() {
@@ -188,29 +200,14 @@ async function fetchVideos() {
     const res = await fetch(GH_README_RAW);
     if (!res.ok) throw new Error("Failed to load README");
     const text = await res.text();
-    let videos = parseVideosFromReadme(text);
-
-    if (videos.length === 0) {
-      const genericRegex = /(https:\/\/www\.youtube\.com\/watch\?v=([A-Za-z0-9_-]{6,})).*?\*\*\]?\)?/g;
-      const fallback = [];
-      let m;
-      while ((m = genericRegex.exec(text)) && fallback.length < 6) {
-        fallback.push({
-          url: m[1],
-          title: "YouTube Video",
-          thumb: `https://img.youtube.com/vi/${m[2]}/hqdefault.jpg`,
-          date: null,
-        });
-      }
-      videos = fallback;
-    }
+    const videos = parseVideosFromReadme(text);
 
     if (videos.length === 0) {
       grid.innerHTML = `<p>Could not find recent videos in the README. Visit <a href="https://www.youtube.com/c/eleftheriabatsou" target="_blank">YouTube</a>.</p>`;
       return;
     }
 
-    videos.forEach((v) => {
+    videos.forEach((v, i) => {
       const card = document.createElement("a");
       card.href = v.url;
       card.target = "_blank";
@@ -221,6 +218,7 @@ async function fetchVideos() {
         <div class="title">${v.title}</div>
       `;
       grid.appendChild(card);
+      setTimeout(() => card.classList.add("visible"), 60 * i);
     });
   } catch (err) {
     console.error(err);
@@ -281,7 +279,7 @@ async function renderArticles() {
     return;
   }
 
-  all.forEach((a) => {
+  all.forEach((a, i) => {
     const item = document.createElement("div");
     item.className = "article-item";
     item.innerHTML = `
@@ -292,6 +290,7 @@ async function renderArticles() {
       </div>
     `;
     container.appendChild(item);
+    setTimeout(() => item.classList.add("visible"), 70 * i);
   });
 }
 
@@ -310,8 +309,8 @@ function parseSpeakingFromReadme(readmeText) {
 }
 
 async function renderSpeaking() {
-  const ul = document.getElementById("speaking-list");
-  ul.innerHTML = "";
+  const container = document.getElementById("speaking-timeline");
+  container.innerHTML = "";
 
   try {
     const res = await fetch(GH_README_RAW);
@@ -319,23 +318,39 @@ async function renderSpeaking() {
     const text = await res.text();
     const talks = parseSpeakingFromReadme(text);
     if (talks.length === 0) {
-      ul.innerHTML = "<li>See GitHub README for full speaking list.</li>";
+      container.innerHTML = "<div class='timeline-item left'>See GitHub README for full speaking list.</div>";
       return;
     }
-    talks.slice(0, 20).forEach((t) => {
-      const li = document.createElement("li");
-      li.innerHTML = `<a href="${t.url}" target="_blank" rel="noopener">${t.title}</a>`;
-      ul.appendChild(li);
+    talks.slice(0, 12).forEach((t, i) => {
+      const item = document.createElement("div");
+      item.className = "timeline-item " + (i % 2 === 0 ? "left" : "right");
+      item.innerHTML = `<a href="${t.url}" target="_blank" rel="noopener">${t.title}</a>`;
+      container.appendChild(item);
+      // stagger animation
+      setTimeout(() => item.classList.add("visible"), 80 * i);
     });
   } catch (err) {
     console.error(err);
-    ul.innerHTML = "<li>Unable to load speaking data.</li>";
+    container.innerHTML = "<div class='timeline-item left'>Unable to load speaking data.</div>";
   }
 }
 
 function initPanels() {
   // open About by default
   document.getElementById("panel-about").classList.add("active");
+}
+
+function revealOnScroll(selector){
+  const els = document.querySelectorAll(selector);
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach((entry)=>{
+      if(entry.isIntersecting){
+        entry.target.classList.add("visible");
+        io.unobserve(entry.target);
+      }
+    });
+  },{threshold:0.15});
+  els.forEach(el=>io.observe(el));
 }
 
 async function init() {
@@ -345,6 +360,7 @@ async function init() {
   await fetchVideos();
   await renderArticles();
   await renderSpeaking();
+  revealOnScroll(".video-card, .article-item");
 }
 
 document.addEventListener("DOMContentLoaded", init);
