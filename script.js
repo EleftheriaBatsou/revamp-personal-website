@@ -169,6 +169,12 @@ function parseVideosFromReadme(readmeText) {
   while ((m2 = regex2.exec(readmeText)) && items.length < 6) {
     items.push({ url: m2[2], title: m2[1] });
   }
+  // Pattern 2b: standard markdown link [Title](youtube.com/watch?v=..)
+  let regex2b = /\[(.*?)\]\((https:\/\/www\.youtube\.com\/watch\?v=[^)\s]+)\)/g;
+  let m2b;
+  while ((m2b = regex2b.exec(readmeText)) && items.length < 6) {
+    items.push({ url: m2b[2], title: m2b[1] });
+  }
   let regex3 = /(https:\/\/www\.youtube\.com\/watch\?v=([A-Za-z0-9_-]{6,}))/g;
   let seen = new Set(items.map(i => i.url));
   let m3;
@@ -185,15 +191,74 @@ function parseVideosFromReadme(readmeText) {
   }));
 }
 
+// Optional: YouTube RSS fallback (provide channel ID below to enable)
+const YT_CHANNEL_ID = ""; // e.g., "UCxxxxxxxxxxxxxxxx"
+async function fetchYouTubeRSS(){
+  if(!YT_CHANNEL_ID) return null;
+  try{
+    const res = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${YT_CHANNEL_ID}`);
+    if(!res.ok) throw new Error("YouTube RSS error");
+    const text = await res.text();
+    const xml = new DOMParser().parseFromString(text, "application/xml");
+    const entries = Array.from(xml.querySelectorAll("entry")).slice(0,4);
+    return entries.map(e=>{
+      const title = e.querySelector("title")?.textContent || "YouTube Video";
+      const link = e.querySelector("link")?.getAttribute("href") || "";
+      const published = e.querySelector("published")?.textContent || "";
+      const v = new URL(link).searchParams.get("v");
+      const thumb = v ? `https://img.youtube.com/vi/${v}/hqdefault.jpg` : "";
+      return {title, url:link, date:new Date(published).toLocaleDateString(), thumb};
+    });
+  }catch(err){
+    console.error(err);
+    return null;
+  }
+}
+
+// Try to enrich titles via YouTube oEmbed (dates not available via oEmbed)
+async function enrichVideoTitles(videos){
+  const enriched = await Promise.all(videos.slice(0,4).map(async (v)=>{
+    try{
+      const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(v.url)}&format=json`);
+      if(res.ok){
+        const data = await res.json();
+        v.title = data.title || v.title;
+      }
+    }catch(e){ /* ignore */ }
+    return v;
+  }));
+  return enriched;
+}
+
 async function fetchVideos() {
   const grid = document.getElementById("videos-grid");
   grid.innerHTML = "";
 
   try {
+    // Try RSS first if channel ID provided
+    const rssVideos = await fetchYouTubeRSS();
+    if(rssVideos && rssVideos.length){
+      rssVideos.forEach((v, i)=>{
+        const card = document.createElement("a");
+        card.href = v.url; card.target = "_blank"; card.rel = "noopener";
+        card.className = "video-card";
+        card.innerHTML = `
+          <img src="${v.thumb}" alt="">
+          <div class="meta">${v.date}</div>
+          <div class="title">${v.title}</div>
+        `;
+        grid.appendChild(card);
+        setTimeout(()=>card.classList.add("visible"), 60*i);
+      });
+      return;
+    }
+
+    // Fallback: parse README
     const res = await fetch(GH_README_RAW);
     if (!res.ok) throw new Error("Failed to load README");
     const text = await res.text();
-    const videos = parseVideosFromReadme(text);
+    let videos = parseVideosFromReadme(text);
+    videos = await enrichVideoTitles(videos);
 
     if (videos.length === 0) {
       grid.innerHTML = `<p>Could not find recent videos in the README. Visit <a href="https://www.youtube.com/c/eleftheriabatsou" target="_blank">YouTube</a>.</p>`;
@@ -411,6 +476,38 @@ function renderGlobePins(talks){
   });
 }
 
+// Globe map fallbacks
+const MAP_SOURCES = [
+  "https://upload.wikimedia.org/wikipedia/commons/5/51/BlankMap-World-v2.png",
+  "https://upload.wikimedia.org/wikipedia/commons/8/80/Mercator_projection_SW.jpg"
+];
+
+function preloadImage(url){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = ()=> resolve(url);
+    img.onerror = ()=> reject(new Error("Image load failed"));
+    img.src = url;
+  });
+}
+
+async function ensureGlobeMap(){
+  const globeEl = document.getElementById("globe");
+  for(const url of MAP_SOURCES){
+    try{
+      const ok = await preloadImage(url);
+      globeEl.style.backgroundImage = `url('${ok}')`;
+      globeEl.style.backgroundRepeat = "repeat-x";
+      globeEl.style.backgroundSize = "auto 100%";
+      globeEl.style.backgroundPosition = `${currentGlobeOffset}px center`;
+      return true;
+    }catch(e){}
+  }
+  globeEl.style.backgroundImage = "none";
+  return false;
+}
+
 // Drag-to-rotate globe horizontally with inertia
 let currentGlobeOffset = 0;
 let inertiaVelocity = 0;
@@ -514,6 +611,7 @@ async function renderSpeaking() {
       setTimeout(() => item.classList.add("visible"), 80 * i);
     });
 
+    await ensureGlobeMap();
     renderGlobePins(recent);
     enableGlobeDrag();
 
