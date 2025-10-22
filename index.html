@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Eleftheria Batsou — Portfolio</title>
+  <meta name="description" content="Eleftheria Batsou — Developer Advocate portfolio. A playful, game-inspired site with dynamic content from GitHub, latest videos and articles." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Nunito:wght@300;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="game">
+    <div class="parallax">
+      <div class="layer sky"></div>
+      <div class="layer clouds"></div>
+      <div class="layer mountains"></div>
+      <div class="layer hills"></div>
+    </div>
+
+    <header class="hud">
+      <div class="hud-left">
+        <span class="hud-item">PLAYER: ELEFTHERIA</span>
+        <span class="hud-item">WORLD 1-1</span>
+      </div>
+      <div class="hud-right">
+        <span class="hud-item">COINS <span id="coin-count">00</span></span>
+        <span class="hud-item">TIME <span id="timer">400</span></span>
+      </div>
+    </header>
+
+    <main>
+      <section class="stage">
+        <div class="ground"></div>
+
+        <!-- Interactive blocks row -->
+        <div class="blocks-row">
+          <button class="block question" data-panel="about" aria-label="Open About panel">
+            <span class="block-face">?</span>
+          </button>
+          <button class="block brick" data-panel="videos" aria-label="Open Videos panel">
+            <span class="block-face">▶</span>
+          </button>
+          <button class="block brick" data-panel="articles" aria-label="Open Articles panel">
+            <span class="block-face">✎</span>
+          </button>
+          <button class="block brick" data-panel="speaking" aria-label="Open Speaking panel">
+            <span class="block-face">🎤</span>
+          </button>
+          <button class="block question" data-panel="links" aria-label="Open Links panel">
+            <span class="block-face">★</span>
+          </button>
+        </div>
+
+        <!-- Princess character -->
+        <div id="peach" title="Princess Eleftheria"></div>
+
+        <!-- Floating coins -->
+        <div class="coins">
+          <div class="coin"></div><div class="coin"></div><div class="coin"></div>
+          <div class="coin"></div><div class="coin"></div><div class="coin"></div>
+        </div>
+      </section>
+
+      <!-- Panels -->
+      <section class="panel" id="panel-about">
+        <h2>About</h2>
+        <div class="panel-content">
+          <div class="bio">
+            <img id="avatar" alt="Eleftheria avatar" />
+            <div>
+              <h3 id="name">Eleftheria Batsou</h3>
+              <p id="bio">Loading bio...</p>
+              <ul class="stats">
+                <li><strong>Followers:</strong> <span id="followers">—</span></li>
+                <li><strong>Following:</strong> <span id="following">—</span></li>
+                <li><strong>Public repos:</strong> <span id="repos">—</span></li>
+              </ul>
+            </div>
+          </div>
+          <p class="about-text">
+            Developer Advocate, keen on UX research and public speaking. This playful portfolio pulls in live data from GitHub, YouTube and Dev.to/Hashnode.
+            Click the blocks above to explore videos, articles, speaking engagements, and links.
+          </p>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-videos">
+        <h2>Latest Videos</h2>
+        <div class="grid" id="videos-grid">
+          <!-- populated by script.js from GitHub README or YouTube RSS -->
+        </div>
+        <div class="panel-actions">
+          <a class="cta" href="https://www.youtube.com/c/eleftheriabatsou" target="_blank" rel="noopener">Visit YouTube</a>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-articles">
+        <h2>Latest Articles</h2>
+        <div class="list" id="articles-list">
+          <!-- populated by script.js from Dev.to API and Hashnode RSS -->
+        </div>
+        <div class="panel-actions">
+          <a class="cta" href="https://eleftheriabatsou.hashnode.dev/" target="_blank" rel="noopener">Hashnode</a>
+          <a class="cta" href="https://dev.to/eleftheriabatsou" target="_blank" rel="noopener">Dev.to</a>
+          <a class="cta" href="https://eleftheriabatsou.medium.com/" target="_blank" rel="noopener">Medium</a>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-speaking">
+        <h2>Speaking</h2>
+        <p>Some recent conferences and meetups where I've spoken:</p>
+        <ul class="speaking-list" id="speaking-list">
+          <!-- populated from README highlights -->
+        </ul>
+        <p class="note">
+          For a full list, check my GitHub profile README or reach out.
+        </p>
+      </section>
+
+      <section class="panel" id="panel-links">
+        <h2>Links</h2>
+        <div class="links">
+          <a class="link-card" href="https://github.com/EleftheriaBatsou" target="_blank" rel="noopener">
+            <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="" />
+            <span>GitHub</span>
+          </a>
+          <a class="link-card" href="https://twitter.com/BatsouElef" target="_blank" rel="noopener">
+            <img src="https://abs.twimg.com/favicons/twitter.2.ico" alt="" />
+            <span>X / Twitter</span>
+          </a>
+          <a class="link-card" href="https://www.linkedin.com/in/eleftheriabatsou" target="_blank" rel="noopener">
+            <img src="https://static.licdn.com/sc/h/al2o9zrvru7aqj9l6j1bu1qr1" alt="" />
+            <span>LinkedIn</span>
+          </a>
+          <a class="link-card" href="https://eleftheriabatsou.hashnode.dev/" target="_blank" rel="noopener">
+            <img src="https://cdn.hashnode.com/res/hashnode/image/upload/v1611902475075/1y4fUyy9y.png" alt="" />
+            <span>Hashnode</span>
+          </a>
+          <a class="link-card" href="https://dev.to/eleftheriabatsou" target="_blank" rel="noopener">
+            <img src="https://d2fltix0v2e0sb.cloudfront.net/dev-black.png" alt="" />
+            <span>Dev.to</span>
+          </a>
+          <a class="link-card" href="https://eleftheriabatsou.medium.com/" target="_blank" rel="noopener">
+            <img src="https://miro.medium.com/v2/resize:fill:48:48/1*8vJqR6P4PZfW1WqW8a7Qyg.png" alt="" />
+            <span>Medium</span>
+          </a>
+          <a class="link-card" href="https://www.youtube.com/c/eleftheriabatsou" target="_blank" rel="noopener">
+            <img src="https://www.youtube.com/s/desktop/9b9f5f29/img/favicon_144x144.png" alt="" />
+            <span>YouTube</span>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="credits">
+        © <span id="year"></span> Eleftheria Batsou • Built with HTML/CSS/JS • Game aesthetics inspired by classic platformers.
+      </div>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

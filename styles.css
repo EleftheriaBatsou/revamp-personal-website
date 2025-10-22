@@ -1,0 +1,214 @@
+:root{
+  --bg-sky:#87ceeb;
+  --bg-cloud:#ffffff;
+  --bg-mountain:#6c7a89;
+  --bg-hill:#77b255;
+  --ground:#8b5a2b;
+  --ground-top:#c28c5e;
+  --brick:#b2483c;
+  --question:#f2d857;
+  --question-border:#caa122;
+  --primary:#ff5ea5;
+  --secondary:#5e9cff;
+  --accent:#ffd34a;
+  --text:#141414;
+  --panel:#0e0e0e;
+  --panel-2:#171717;
+}
+
+*{box-sizing:border-box}
+html,body{
+  height:100%;
+  margin:0;
+  font-family:'Nunito',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  color:var(--text);
+  background:linear-gradient(#1b1633,#100d22 60%,#0c0a18);
+}
+
+#game{
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* Parallax background */
+.parallax{position:fixed; inset:0; z-index:-1; perspective:1px; transform-style:preserve-3d}
+.layer{position:absolute; inset:0; background-repeat:repeat-x; animation:scroll 60s linear infinite}
+.layer.sky{background:linear-gradient(var(--bg-sky),#b6e7ff); transform:translateZ(-2px) scale(3); animation-duration:120s}
+.layer.clouds{background-image:
+  radial-gradient(circle at 20% 40%, var(--bg-cloud) 0 18%, transparent 19%),
+  radial-gradient(circle at 60% 30%, var(--bg-cloud) 0 14%, transparent 15%),
+  radial-gradient(circle at 80% 50%, var(--bg-cloud) 0 12%, transparent 13%);
+  opacity:.7; transform:translateZ(-1.5px) scale(2.5); animation-duration:90s}
+.layer.mountains{
+  background-image:
+    linear-gradient(to top, transparent 0 60%, var(--bg-mountain) 60% 61%, transparent 61%),
+    linear-gradient(to top, transparent 0 65%, #5a6672 65% 66%, transparent 66%),
+    linear-gradient(to top, transparent 0 70%, #49525c 70% 71%, transparent 71%);
+  opacity:.6; transform:translateZ(-1px) scale(2); animation-duration:75s}
+.layer.hills{
+  background-image:
+    linear-gradient(to top, transparent 0 80%, var(--bg-hill) 80% 81%, transparent 81%),
+    linear-gradient(to top, transparent 0 85%, #69a84d 85% 86%, transparent 86%);
+  opacity:.7; transform:translateZ(-.5px) scale(1.5); animation-duration:60s}
+
+@keyframes scroll{
+  from{background-position:0 0}
+  to{background-position:-2000px 0}
+}
+
+/* HUD */
+.hud{
+  position:fixed; top:0; left:0; right:0;
+  display:flex; justify-content:space-between; align-items:center;
+  padding:12px 20px; z-index:10;
+  font-family:'Press Start 2P', monospace;
+  color:#fff; text-shadow:0 2px 0 #000;
+}
+.hud .hud-item{margin-right:14px}
+
+/* Stage */
+.stage{position:relative; padding-top:100px; padding-bottom:160px}
+.ground{
+  position:absolute; left:0; right:0; bottom:0; height:120px;
+  background:
+    linear-gradient(var(--ground-top), var(--ground) 30% 100%),
+    repeating-linear-gradient(90deg, rgba(0,0,0,.15) 0 12px, rgba(0,0,0,.1) 12px 24px);
+  box-shadow:0 -4px 0 #00000055 inset;
+}
+
+/* Blocks */
+.blocks-row{
+  display:flex; gap:18px; justify-content:center; align-items:flex-end;
+  margin:60px auto; max-width:900px;
+  transform:translateY(-10px);
+}
+.block{
+  width:84px; height:84px; border-radius:8px;
+  border:4px solid #000; position:relative; cursor:pointer;
+  box-shadow:0 6px 0 #0003, inset 0 -4px 0 #0002;
+  transform:translateY(0); transition:transform .08s ease, filter .2s ease;
+  background-size:cover; background-position:center;
+  outline:none;
+}
+.block .block-face{
+  font-family:'Press Start 2P', monospace; font-size:28px;
+  color:#222; text-shadow:0 2px 0 #fff8;
+}
+.block.question{background:linear-gradient(var(--question), #e7c84c); border-color:var(--question-border)}
+.block.brick{background:
+  linear-gradient(180deg, #b95949 0 12%, #8a3d32 12% 40%, #b95949 40% 52%, #8a3d32 52% 100%);
+  border-color:#742f27}
+.block:active{transform:translateY(6px)}
+.block:hover{filter:brightness(1.1)}
+
+/* Princess Peach (character) */
+#peach{
+  position:absolute; left:50%; bottom:120px; width:92px; height:120px;
+  transform:translateX(-50%);
+  background-image:url('https://raw.githubusercontent.com/0xType/retro-sprites/main/mario/princess_peach.png');
+  background-size:contain; background-repeat:no-repeat; image-rendering:pixelated;
+  animation:peach-idle .8s steps(2) infinite alternate;
+  filter:drop-shadow(0 6px 0 #0005);
+}
+@keyframes peach-idle{
+  to{transform:translateX(-50%) translateY(-2px)}
+}
+
+/* Coins */
+.coins{position:absolute; left:0; right:0; bottom:220px; display:flex; justify-content:center; gap:28px}
+.coin{
+  width:24px; height:24px; border-radius:50%;
+  background:radial-gradient(circle at 50% 35%, #fff7 0 4px, #ffd800 4px 12px, #caa122 12px 16px, transparent 17px);
+  animation:coin-bounce 1.6s ease-in-out infinite;
+  box-shadow:0 2px 0 #0004;
+}
+.coin:nth-child(2){animation-delay:.2s}
+.coin:nth-child(3){animation-delay:.4s}
+.coin:nth-child(4){animation-delay:.6s}
+.coin:nth-child(5){animation-delay:.8s}
+.coin:nth-child(6){animation-delay:1s}
+@keyframes coin-bounce{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-24px)}
+}
+
+/* Panels */
+.panel{
+  margin:40px auto; padding:22px; max-width:980px;
+  border:3px solid #000; border-radius:16px;
+  background:linear-gradient(180deg, var(--panel), var(--panel-2));
+  box-shadow:0 8px 0 #0004, inset 0 3px 0 #ffffff12;
+  color:#eee;
+  display:none;
+}
+.panel.active{display:block; animation:panel-pop .25s ease}
+@keyframes panel-pop{from{transform:scale(.98); opacity:.6} to{transform:scale(1); opacity:1}}
+.panel h2{
+  font-family:'Press Start 2P', monospace; color:#fff; margin:0 0 16px; letter-spacing:1px;
+}
+
+/* Panel content */
+.bio{display:flex; gap:18px; align-items:center}
+.bio img{width:96px; height:96px; border-radius:12px; border:3px solid #000; object-fit:cover}
+.bio h3{margin:0 0 6px; color:#fff}
+.stats{list-style:none; padding:0; margin:6px 0 0; display:flex; gap:18px}
+.about-text{margin-top:16px; color:#ddd}
+
+.grid{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px;
+}
+.video-card{
+  position:relative; overflow:hidden; border-radius:12px; border:2px solid #000;
+  background:#0c0c0c; box-shadow:0 6px 0 #0003;
+}
+.video-card img{width:100%; display:block}
+.video-card .title{
+  position:absolute; left:0; right:0; bottom:0; padding:10px 12px;
+  background:linear-gradient(transparent, rgba(0,0,0,.7));
+  color:#fff; font-size:14px; font-weight:700;
+}
+.video-card::after{
+  content:"▶"; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  font-family:'Press Start 2P'; color:#fff; font-size:26px; text-shadow:0 3px 0 #0009;
+  opacity:.0; transition:opacity .2s ease;
+}
+.video-card:hover::after{opacity:.9}
+
+.list{display:flex; flex-direction:column; gap:12px}
+.article-item{
+  display:flex; gap:12px; align-items:center; padding:12px; border:2px solid #000;
+  border-radius:12px; background:#101010; box-shadow:0 6px 0 #0003;
+}
+.article-item .source{font-family:'Press Start 2P'; color:#ffd34a; font-size:12px}
+.article-item a{color:#c7e0ff; text-decoration:none}
+.article-item a:hover{text-decoration:underline}
+
+.panel-actions{margin-top:16px}
+.cta{
+  display:inline-block; margin-right:10px; padding:10px 12px; border:2px solid #000; border-radius:10px;
+  background:linear-gradient(180deg, #ff7abf, #ff5ea5); color:#fff; text-decoration:none; font-weight:800;
+  box-shadow:0 6px 0 #0004;
+}
+.cta:hover{filter:brightness(1.1)}
+
+.speaking-list{columns:2; column-gap:24px; padding-left:18px}
+.speaking-list li{margin-bottom:8px}
+
+.links{display:flex; flex-wrap:wrap; gap:12px}
+.link-card{
+  display:flex; align-items:center; gap:10px; padding:10px 12px; border:2px solid #000; border-radius:12px;
+  background:#101010; color:#fff; text-decoration:none; font-weight:700; box-shadow:0 6px 0 #0003;
+}
+.link-card img{width:24px; height:24px}
+
+.footer{
+  padding:24px; text-align:center; color:#bbb; font-size:14px;
+}
+
+/* Responsive tweaks */
+@media (max-width:720px){
+  .blocks-row{gap:12px}
+  .block{width:72px; height:72px}
+  #peach{bottom:110px}
+  .speaking-list{columns:1}
+}
