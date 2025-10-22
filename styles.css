@@ -153,7 +153,11 @@ html,body{
 .bio h3{margin:0 0 6px; color:#fff}
 .stats{list-style:none; padding:0; margin:6px 0 0; display:flex; gap:18px}
 .about-text{margin-top:16px; color:#ddd}
+.subheading{margin:16px 0 8px; color:#fff; font-weight:800}
+.highlights-list{padding-left:18px; margin:8px 0 0; color:#ddd}
+.highlights-list li{margin-bottom:8px}
 
+/* Videos grid */
 .grid{
   display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px;
 }

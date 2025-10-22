@@ -1,6 +1,6 @@
 /**
  * Game-like portfolio interactions and dynamic content.
- * Pulls data from GitHub, Dev.to, Hashnode RSS, and README for recent videos.
+ * Pulls data from GitHub, Dev.to, Hashnode RSS, and README for recent videos and details.
  */
 
 const GH_USERNAME = "EleftheriaBatsou";
@@ -55,14 +55,11 @@ document.addEventListener("mousemove", (e) => {
   peach.style.transform = `translateX(calc(-50% + ${offset}px))`;
 });
 
-// Fetch GitHub profile info
+// Fetch GitHub profile info (avatar, name, bio only)
 async function fetchGitHubProfile() {
   const bioEl = document.getElementById("bio");
   const nameEl = document.getElementById("name");
   const avatarEl = document.getElementById("avatar");
-  const followersEl = document.getElementById("followers");
-  const followingEl = document.getElementById("following");
-  const reposEl = document.getElementById("repos");
 
   try {
     const res = await fetch(GH_PROFILE_API);
@@ -71,19 +68,100 @@ async function fetchGitHubProfile() {
     avatarEl.src = data.avatar_url;
     nameEl.textContent = data.name || data.login;
     bioEl.textContent = data.bio || "Developer Advocate and content creator.";
-    followersEl.textContent = data.followers;
-    followingEl.textContent = data.following;
-    reposEl.textContent = data.public_repos;
   } catch (err) {
     bioEl.textContent = "Unable to load GitHub profile right now.";
     console.error(err);
   }
 }
 
+// Parse intro paragraph from README "About" section
+function parseIntroFromReadme(text) {
+  const aboutIdx = text.indexOf("#### About");
+  if (aboutIdx === -1) return null;
+  const slice = text.slice(aboutIdx);
+  // find first blank line after the heading, then take next paragraph until blank line
+  const lines = slice.split("\n");
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim().toLowerCase().startsWith("#### about")) {
+      start = i + 1;
+      break;
+    }
+  }
+  if (start === -1) return null;
+  const paras = [];
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim().startsWith("####")) break; // next section
+    if (line.trim() === "") {
+      if (paras.length) break;
+      else continue;
+    }
+    paras.push(line);
+  }
+  const md = paras.join(" ");
+  // very simple markdown link to anchor conversion
+  return md
+    .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+
+// Parse highlights from "🌱 That's me" bullet list
+function parseHighlightsFromReadme(text) {
+  const idx = text.indexOf("#### 🌱 That's me");
+  if (idx === -1) return [];
+  const slice = text.slice(idx);
+  const lines = slice.split("\n");
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim().toLowerCase().includes("that's me")) {
+      start = i + 1;
+      break;
+    }
+  }
+  const items = [];
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim().startsWith("####")) break; // end of section
+    if (/^-\s+/.test(line)) {
+      // convert markdown links
+      const html = line
+        .replace(/^-\s+/, "")
+        .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      items.push(html);
+    }
+  }
+  return items;
+}
+
+async function renderAboutDetails() {
+  const introEl = document.getElementById("about-intro");
+  const highlightsEl = document.getElementById("about-highlights");
+  try {
+    const res = await fetch(GH_README_RAW);
+    if (!res.ok) throw new Error("README load error");
+    const text = await res.text();
+    const intro = parseIntroFromReadme(text);
+    const highlights = parseHighlightsFromReadme(text);
+    if (intro) introEl.innerHTML = intro;
+    else introEl.textContent = "Developer Advocate focused on UX, research and content.";
+    highlightsEl.innerHTML = "";
+    if (highlights.length) {
+      highlights.slice(0, 6).forEach((h) => {
+        const li = document.createElement("li");
+        li.innerHTML = h;
+        highlightsEl.appendChild(li);
+      });
+    } else {
+      highlightsEl.innerHTML = "<li>Creating content, building communities, organizing events and conferences.</li>";
+    }
+  } catch (err) {
+    console.error(err);
+    introEl.textContent = "Unable to load README details right now.";
+  }
+}
+
 // Parse recent videos from README or fallback to YouTube thumbnails found in README
 function parseVideosFromReadme(readmeText) {
-  // The README has a "Recent YouTube Videos" section with a table of markdown images and links.
-  // We'll extract up to 6 YouTube links and their titles.
   const sectionStart = readmeText.indexOf("Recent YouTube Videos");
   if (sectionStart === -1) return [];
   const slice = readmeText.slice(sectionStart, sectionStart + 8000);
@@ -113,7 +191,6 @@ async function fetchVideos() {
     let videos = parseVideosFromReadme(text);
 
     if (videos.length === 0) {
-      // fallback: find any youtube links in README
       const genericRegex = /(https:\/\/www\.youtube\.com\/watch\?v=([A-Za-z0-9_-]{6,})).*?\*\*\]?\)?/g;
       const fallback = [];
       let m;
@@ -264,6 +341,7 @@ function initPanels() {
 async function init() {
   initPanels();
   await fetchGitHubProfile();
+  await renderAboutDetails();
   await fetchVideos();
   await renderArticles();
   await renderSpeaking();
