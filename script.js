@@ -79,7 +79,6 @@ function parseIntroFromReadme(text) {
   const aboutIdx = text.indexOf("#### About");
   if (aboutIdx === -1) return null;
   const slice = text.slice(aboutIdx);
-  // find first blank line after the heading, then take next paragraph until blank line
   const lines = slice.split("\n");
   let start = -1;
   for (let i = 0; i < lines.length; i++) {
@@ -100,9 +99,7 @@ function parseIntroFromReadme(text) {
     paras.push(line);
   }
   const md = paras.join(" ");
-  // very simple markdown link to anchor conversion
-  return md
-    .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return md.replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 }
 
 // Parse highlights from "🌱 That's me" bullet list
@@ -123,7 +120,6 @@ function parseHighlightsFromReadme(text) {
     const line = lines[i];
     if (line.trim().startsWith("####")) break; // end of section
     if (/^-\s+/.test(line)) {
-      // convert markdown links
       const html = line
         .replace(/^-\s+/, "")
         .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
@@ -163,19 +159,16 @@ async function renderAboutDetails() {
 // Parse recent videos from README using multiple patterns
 function parseVideosFromReadme(readmeText) {
   const items = [];
-  // Pattern 1: image followed by title link
   let regex1 = /\[!\[.*?\]\]\((https:\/\/www\.youtube\.com\/watch\?v=[^)\s]+)\)\s*<br>\s*\[\*\*(.*?)\*\*\]\(\1\)/g;
   let m1;
   while ((m1 = regex1.exec(readmeText)) && items.length < 6) {
     items.push({ url: m1[1], title: m1[2] });
   }
-  // Pattern 2: bold title directly linking to youtube
   let regex2 = /\[\*\*(.*?)\*\*\]\((https:\/\/www\.youtube\.com\/watch\?v=[^)\s]+)\)/g;
   let m2;
   while ((m2 = regex2.exec(readmeText)) && items.length < 6) {
     items.push({ url: m2[2], title: m2[1] });
   }
-  // Pattern 3: any youtube link
   let regex3 = /(https:\/\/www\.youtube\.com\/watch\?v=([A-Za-z0-9_-]{6,}))/g;
   let seen = new Set(items.map(i => i.url));
   let m3;
@@ -185,7 +178,6 @@ function parseVideosFromReadme(readmeText) {
       seen.add(m3[1]);
     }
   }
-  // Add thumbs
   return items.map(i => ({
     ...i,
     thumb: `https://img.youtube.com/vi/${new URL(i.url).searchParams.get("v")}/hqdefault.jpg`
@@ -207,7 +199,7 @@ async function fetchVideos() {
       return;
     }
 
-    videos.forEach((v, i) => {
+    videos.slice(0,4).forEach((v, i) => {
       const card = document.createElement("a");
       card.href = v.url;
       card.target = "_blank";
@@ -308,6 +300,104 @@ function parseSpeakingFromReadme(readmeText) {
   return items;
 }
 
+// Extract country name from a talk title like "... in Country"
+function extractCountry(title){
+  const m = title.match(/\bin\s+([A-Za-z& ]+)\b/);
+  if(!m) return null;
+  return m[1].trim();
+}
+
+// Simple country center coordinates (lat, lon)
+const COUNTRY_COORDS = {
+  "Croatia": [45.1, 15.2],
+  "Portugal": [39.5, -8.0],
+  "Poland": [52.0, 19.0],
+  "Greece": [39.0, 22.0],
+  "Serbia": [44.0, 20.5],
+  "Germany": [51.0, 10.0],
+  "UK": [52.8, -1.6],
+  "United Kingdom": [52.8, -1.6],
+  "Lithuania": [55.2, 23.8],
+  "Romania": [45.9, 24.9],
+  "Bosnia & Herzegovina": [43.9, 17.7],
+  "Bosnia and Herzegovina": [43.9, 17.7],
+  "Denmark": [56.2, 9.5],
+  "Belgium": [50.8, 4.7],
+  "Norway": [61.0, 8.0],
+  "Israel": [31.0, 35.0],
+  "Ukraine": [49.0, 32.0],
+  "Netherlands": [52.1, 5.3],
+  "Italy": [42.8, 12.5],
+  "Latvia": [57.0, 25.0]
+};
+
+// Convert lat/lon to position on Mercator background box
+function latLonToXY(lat, lon, width, height, offsetX=0){
+  const x = ((lon + 180) / 360) * width + offsetX;
+  const y = (height/2) - (height / (2*Math.PI)) * Math.log(Math.tan(Math.PI/4 + (lat*Math.PI/180)/2));
+  return {x, y};
+}
+
+function renderGlobePins(talks){
+  const pinsEl = document.getElementById("globe-pins");
+  const globeEl = document.getElementById("globe");
+  pinsEl.innerHTML = "";
+  const rect = globeEl.getBoundingClientRect();
+  const w = rect.width, h = rect.height;
+
+  talks.forEach((t)=>{
+    const country = extractCountry(t.title);
+    if(!country) return;
+    const coords = COUNTRY_COORDS[country];
+    if(!coords) return;
+    const {x, y} = latLonToXY(coords[0], coords[1], w, h, currentGlobeOffset);
+    const pin = document.createElement("div");
+    pin.className = "pin";
+    pin.setAttribute("data-title", t.title);
+    pin.style.left = `${((x % w) + w) % w}px`; // wrap into [0,w)
+    pin.style.top = `${Math.max(8, Math.min(h-8, y))}px`;
+    pinsEl.appendChild(pin);
+  });
+}
+
+// Drag-to-rotate globe horizontally
+let currentGlobeOffset = 0;
+function enableGlobeDrag(){
+  const globeEl = document.getElementById("globe");
+  let dragging = false;
+  let lastX = 0;
+  globeEl.addEventListener("mousedown", (e)=>{
+    dragging = true; lastX = e.clientX;
+  });
+  window.addEventListener("mousemove", (e)=>{
+    if(!dragging) return;
+    const dx = e.clientX - lastX;
+    lastX = e.clientX;
+    currentGlobeOffset += dx;
+    globeEl.style.backgroundPosition = `${currentGlobeOffset}px center`;
+    if(latestTalksForPins.length){
+      renderGlobePins(latestTalksForPins);
+    }
+  });
+  window.addEventListener("mouseup", ()=> dragging = false);
+  globeEl.addEventListener("touchstart", (e)=>{
+    dragging = true; lastX = e.touches[0].clientX;
+  }, {passive:true});
+  window.addEventListener("touchmove", (e)=>{
+    if(!dragging) return;
+    const dx = e.touches[0].clientX - lastX;
+    lastX = e.touches[0].clientX;
+    currentGlobeOffset += dx;
+    globeEl.style.backgroundPosition = `${currentGlobeOffset}px center`;
+    if(latestTalksForPins.length){
+      renderGlobePins(latestTalksForPins);
+    }
+  }, {passive:true});
+  window.addEventListener("touchend", ()=> dragging = false);
+}
+
+let latestTalksForPins = [];
+
 async function renderSpeaking() {
   const container = document.getElementById("speaking-timeline");
   container.innerHTML = "";
@@ -321,14 +411,20 @@ async function renderSpeaking() {
       container.innerHTML = "<div class='timeline-item left'>See GitHub README for full speaking list.</div>";
       return;
     }
-    talks.slice(0, 12).forEach((t, i) => {
+    const recent = talks.slice(0, 6); // show only last 6
+    latestTalksForPins = recent;
+
+    recent.forEach((t, i) => {
       const item = document.createElement("div");
       item.className = "timeline-item " + (i % 2 === 0 ? "left" : "right");
       item.innerHTML = `<a href="${t.url}" target="_blank" rel="noopener">${t.title}</a>`;
       container.appendChild(item);
-      // stagger animation
       setTimeout(() => item.classList.add("visible"), 80 * i);
     });
+
+    renderGlobePins(recent);
+    enableGlobeDrag();
+
   } catch (err) {
     console.error(err);
     container.innerHTML = "<div class='timeline-item left'>Unable to load speaking data.</div>";
@@ -336,7 +432,6 @@ async function renderSpeaking() {
 }
 
 function initPanels() {
-  // open About by default
   document.getElementById("panel-about").classList.add("active");
 }
 

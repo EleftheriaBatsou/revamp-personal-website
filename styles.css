@@ -48,6 +48,7 @@ html,body{
   padding:12px 20px; z-index:10;
   font-family:'Press Start 2P', monospace;
   color:#fff; text-shadow:0 2px 0 #000;
+  background:rgba(12,12,12,.6);
 }
 .hud .hud-item{margin-right:14px}
 
@@ -129,8 +130,10 @@ html,body{
 
 /* Videos grid */
 .grid{
-  display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px;
+  display:grid; gap:16px;
 }
+.fixed4{grid-template-columns:repeat(4, 1fr)}
+@media (max-width:900px){.fixed4{grid-template-columns:repeat(2, 1fr)}}
 .video-card{
   position:relative; overflow:hidden; border-radius:12px; border:2px solid #000;
   background:#0c0c0c; box-shadow:0 6px 0 #0003;
@@ -170,6 +173,11 @@ html,body{
 }
 .cta:hover{filter:brightness(1.1)}
 
+/* Speaking layout */
+.speaking-wrap{display:flex; gap:22px; align-items:flex-start}
+.speaking-left{flex:1}
+.speaking-right{flex:1; display:flex; flex-direction:column; align-items:center; gap:8px}
+
 /* Speaking timeline */
 .timeline{
   position:relative; margin:24px 0; padding:10px 0;
@@ -194,6 +202,27 @@ html,body{
 .timeline-item.right::after{left:-33px}
 .timeline-item.visible{transform:translateY(0); opacity:1}
 
+/* Globe */
+.globe{
+  width:280px; height:280px; border-radius:50%;
+  border:3px solid #000; box-shadow:0 8px 0 #0003; overflow:hidden;
+  background-image:url('https://upload.wikimedia.org/wikipedia/commons/8/80/Mercator_projection_SW.jpg');
+  background-size:cover; background-position:0 center; cursor:grab;
+}
+.globe:active{cursor:grabbing}
+.pins{position:relative; width:100%; height:100%}
+.pin{
+  position:absolute; width:14px; height:14px; background:#ff3b3b; border:2px solid #000; border-radius:50%;
+  transform:translate(-50%, -100%); box-shadow:0 2px 0 #0004;
+}
+.pin::after{
+  content:attr(data-title); position:absolute; top:-30px; left:50%; transform:translateX(-50%);
+  background:#000; color:#fff; font-size:12px; padding:6px 8px; border:2px solid #fff; border-radius:8px;
+  white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .15s ease, transform .15s ease;
+}
+.pin:hover::after{opacity:1; transform:translateX(-50%) translateY(-3px)}
+.globe-note{color:#eee; font-size:12px}
+
 /* Links */
 .links{display:flex; flex-wrap:wrap; gap:12px}
 .link-card{
@@ -202,9 +231,10 @@ html,body{
 }
 .link-card img{width:24px; height:24px}
 
-.footer{
-  padding:24px; text-align:center; color:#bbb; font-size:14px;
-}
+/* Header and Footer colors */
+.footer{padding:24px; text-align:center; color:#111; font-size:14px; background:rgba(245,245,245,.85); border-top:3px solid #000}
+.footer a{color:#0d53ff; text-decoration:none; font-weight:800}
+.footer a:hover{text-decoration:underline}
 
 /* Responsive tweaks */
 @media (max-width:900px){
@@ -212,17 +242,11 @@ html,body{
   .timeline-item{width:auto; margin-left:32px}
   .timeline-item.right{left:0}
   .timeline-item.left::after{right:auto; left:-33px}
+  .speaking-wrap{flex-direction:column}
+  .globe{width:100%; height:260px}
 }
 @media (max-width:720px){
   .blocks-row{gap:12px}
   .block{width:72px; height:72px}
   #peach{bottom:90px}
-}
-  .timeline-item.right{left:0}
-  .timeline-item.left::after{right:auto; left:-33px}
-}
-@media (max-width:720px){
-  .blocks-row{gap:12px}
-  .block{width:72px; height:72px}
-  #peach{bottom:110px}
 }

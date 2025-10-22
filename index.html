@@ -78,7 +78,7 @@
 
       <section class="panel" id="panel-videos">
         <h2>Latest Videos</h2>
-        <div class="grid" id="videos-grid">
+        <div class="grid fixed4" id="videos-grid">
           <!-- populated by script.js from GitHub README or YouTube RSS -->
         </div>
         <div class="panel-actions">
@@ -100,44 +100,54 @@
 
       <section class="panel" id="panel-speaking">
         <h2>Speaking</h2>
-        <p>Some recent conferences and meetups where I've spoken:</p>
-        <div id="speaking-timeline" class="timeline">
-          <!-- populated from README highlights -->
+        <div class="speaking-wrap">
+          <div class="speaking-left">
+            <p>Some recent conferences and meetups where I've spoken:</p>
+            <div id="speaking-timeline" class="timeline">
+              <!-- populated from README highlights -->
+            </div>
+            <p class="note">
+              For a full list, check my <a href="https://github.com/EleftheriaBatsou/EleftheriaBatsou#-sometimes-i-speak-at-conferences" target="_blank" rel="noopener">GitHub profile README</a> or <a href="https://x.com/BatsouElef" target="_blank" rel="noopener">reach out on X/Twitter</a>.
+            </p>
+          </div>
+          <div class="speaking-right">
+            <div id="globe" class="globe">
+              <div class="pins" id="globe-pins"></div>
+            </div>
+            <div class="globe-note">Drag to rotate. Hover pins for details.</div>
+          </div>
         </div>
-        <p class="note">
-          For a full list, check my <a href="https://github.com/EleftheriaBatsou/EleftheriaBatsou#-sometimes-i-speak-at-conferences" target="_blank" rel="noopener">GitHub profile README</a> or <a href="https://twitter.com/BatsouElef" target="_blank" rel="noopener">reach out on X/Twitter</a>.
-        </p>
       </section>
 
       <section class="panel" id="panel-links">
         <h2>Links</h2>
         <div class="links">
           <a class="link-card" href="https://github.com/EleftheriaBatsou" target="_blank" rel="noopener">
-            <img src="https://cdn.simpleicons.org/github/ffffff" alt="" />
+            <img src="https://cdn.simpleicons.org/github/ffffff" alt="GitHub icon" />
             <span>GitHub</span>
           </a>
           <a class="link-card" href="https://x.com/BatsouElef" target="_blank" rel="noopener">
-            <img src="https://cdn.simpleicons.org/x/ffffff" alt="" />
+            <img src="https://cdn.simpleicons.org/x/ffffff" alt="X icon" />
             <span>X</span>
           </a>
           <a class="link-card" href="https://www.linkedin.com/in/eleftheriabatsou" target="_blank" rel="noopener">
-            <img src="https://cdn.simpleicons.org/linkedin/0A66C2" alt="" />
+            <img src="https://cdn.simpleicons.org/linkedin/0A66C2" alt="LinkedIn icon" />
             <span>LinkedIn</span>
           </a>
           <a class="link-card" href="https://eleftheriabatsou.hashnode.dev/" target="_blank" rel="noopener">
-            <img src="https://cdn.simpleicons.org/hashnode/2962FF" alt="" />
+            <img src="https://cdn.simpleicons.org/hashnode/2962FF" alt="Hashnode icon" />
             <span>Hashnode</span>
           </a>
           <a class="link-card" href="https://dev.to/eleftheriabatsou" target="_blank" rel="noopener">
-            <img src="https://cdn.simpleicons.org/devdotto/000000" alt="" />
+            <img src="https://cdn.simpleicons.org/devdotto/000000" alt="Dev.to icon" />
             <span>Dev.to</span>
           </a>
           <a class="link-card" href="https://eleftheriabatsou.medium.com/" target="_blank" rel="noopener">
-            <img src="https://cdn.simpleicons.org/medium/12100E" alt="" />
+            <img src="https://cdn.simpleicons.org/medium/12100E" alt="Medium icon" />
             <span>Medium</span>
           </a>
           <a class="link-card" href="https://www.youtube.com/c/eleftheriabatsou" target="_blank" rel="noopener">
-            <img src="https://cdn.simpleicons.org/youtube/FF0000" alt="" />
+            <img src="https://cdn.simpleicons.org/youtube/FF0000" alt="YouTube icon" />
             <span>YouTube</span>
           </a>
         </div>
@@ -146,7 +156,7 @@
 
     <footer class="footer">
       <div class="credits">
-        © <span id="year"></span> Eleftheria Batsou • Built with HTML/CSS/JS
+        © <span id="year"></span> Eleftheria Batsou • Built with <a href="https://go.cosine.sh/elef" target="_blank" rel="noopener">Cosine</a>
       </div>
     </footer>
   </div>
