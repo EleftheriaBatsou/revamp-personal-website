@@ -196,60 +196,18 @@ const YT_CHANNEL_ID = "UCC-WwYv3DEW7Nkm_IP6VeQQ"; // Eleftheria's channel ID
 async function fetchYouTubeRSS(){
   if(!YT_CHANNEL_ID) return null;
   try{
-    // Use a public proxy to avoid CORS
-    const proxyUrl = `https://r.jina.ai/http://www.youtube.com/feeds/videos.xml?channel_id=${YT_CHANNEL_ID}`;
-    const res = await fetch(proxyUrl);
+    const res = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${YT_CHANNEL_ID}`);
     if(!res.ok) throw new Error("YouTube RSS error");
     const text = await res.text();
-
-    // Parse XML robustly (namespaces included)
     const xml = new DOMParser().parseFromString(text, "application/xml");
-    const entries = Array.from(xml.getElementsByTagName("entry")).slice(0, 4);
-
-    const items = await Promise.all(entries.map(async (e) => {
-      const titleNode = e.getElementsByTagName("title")[0];
-      let title = titleNode ? titleNode.textContent : "";
-
-      // Prefer link rel="alternate"
-      let url = "";
-      const links = Array.from(e.getElementsByTagName("link"));
-      const altLink = links.find(l => (l.getAttribute("rel") || "") === "alternate");
-      url = (altLink ? altLink.getAttribute("href") : (links[0]?.getAttribute("href") || ""));
-
-      const publishedNode = e.getElementsByTagName("published")[0];
-      const date = publishedNode ? new Date(publishedNode.textContent).toLocaleDateString(undefined, { year:"numeric", month:"short", day:"numeric" }) : "";
-
-      // media:group / media:description (namespace-aware)
-      let desc = "";
-      const mediaGroup = e.querySelector("media\\:group") || e.getElementsByTagName("media:group")[0];
-      if (mediaGroup) {
-        const mediaDesc = mediaGroup.querySelector("media\\:description") || mediaGroup.getElementsByTagName("media:description")[0];
-        if (mediaDesc) desc = mediaDesc.textContent || "";
-      }
-
-      // Derive video id
-      let vId = "";
-      try {
-        const u = new URL(url);
-        vId = u.searchParams.get("v") || "";
-      } catch (_) {}
-      const thumb = vId ? `https://img.youtube.com/vi/${vId}/hqdefault.jpg` : "";
-
-      // Fallback title via oEmbed if missing or generic
-      if (!title || title.trim().toLowerCase() === "youtube video") {
-        try {
-          const oembed = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
-          if (oembed.ok) {
-            const data = await oembed.json();
-            title = data.title || title;
-          }
-        } catch (_) {}
-      }
-
-      return { title: title || "YouTube Video", url, thumb, date, desc };
-    }));
-
-    return items;
+    const entries = Array.from(xml.querySelectorAll("entry")).slice(0,4);
+    return entries.map(e=>{
+      const title = e.querySelector("title")?.textContent || "YouTube Video";
+      const link = e.querySelector("link")?.getAttribute("href") || "";
+      const v = link ? new URL(link).searchParams.get("v") : null;
+      const thumb = v ? `https://img.youtube.com/vi/${v}/hqdefault.jpg` : "";
+      return {title, url:link, thumb};
+    });
   }catch(err){
     console.error(err);
     return null;
@@ -261,34 +219,24 @@ async function fetchVideos() {
   grid.innerHTML = "";
 
   try {
-    // Try RSS first if channel ID provided (titles + dates + desc)
+    // Try RSS first if channel ID provided (titles only, no dates)
     const rssVideos = await fetchYouTubeRSS();
     if(rssVideos && rssVideos.length){
       rssVideos.forEach((v, i)=>{
-        const card = document.createElement("div");
+        const card = document.createElement("a");
+        card.href = v.url; card.target = "_blank"; card.rel = "noopener";
         card.className = "video-card";
-
-        const thumbLink = document.createElement("a");
-        thumbLink.href = v.url; thumbLink.target = "_blank"; thumbLink.rel = "noopener";
-        thumbLink.innerHTML = `<img src="${v.thumb}" alt="${v.title}">`;
-
-        const info = document.createElement("div");
-        info.className = "video-info";
-        info.innerHTML = `
-          <a class="video-title" href="${v.url}" target="_blank" rel="noopener">${v.title}</a>
-          <div class="video-meta">${v.date || ""}</div>
-          <div class="video-desc">${v.desc ? v.desc : ""}</div>
+        card.innerHTML = `
+          <img src="${v.thumb}" alt="">
+          <div class="title">${v.title}</div>
         `;
-
-        card.appendChild(thumbLink);
-        card.appendChild(info);
         grid.appendChild(card);
         setTimeout(()=>card.classList.add("visible"), 60*i);
       });
       return;
     }
 
-    // Fallback: parse README (title only)
+    // Fallback: parse README
     const res = await fetch(GH_README_RAW);
     if (!res.ok) throw new Error("Failed to load README");
     const text = await res.text();
@@ -300,21 +248,15 @@ async function fetchVideos() {
     }
 
     videos.slice(0,4).forEach((v, i) => {
-      const card = document.createElement("div");
+      const card = document.createElement("a");
+      card.href = v.url;
+      card.target = "_blank";
+      card.rel = "noopener";
       card.className = "video-card";
-
-      const thumbLink = document.createElement("a");
-      thumbLink.href = v.url; thumbLink.target = "_blank"; thumbLink.rel = "noopener";
-      thumbLink.innerHTML = `<img src="${v.thumb}" alt="${v.title}">`;
-
-      const info = document.createElement("div");
-      info.className = "video-info";
-      info.innerHTML = `
-        <a class="video-title" href="${v.url}" target="_blank" rel="noopener">${v.title}</a>
+      card.innerHTML = `
+        <img src="${v.thumb}" alt="">
+        <div class="title">${v.title}</div>
       `;
-
-      card.appendChild(thumbLink);
-      card.appendChild(info);
       grid.appendChild(card);
       setTimeout(() => card.classList.add("visible"), 60 * i);
     });
