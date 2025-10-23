@@ -204,10 +204,9 @@ async function fetchYouTubeRSS(){
     return entries.map(e=>{
       const title = e.querySelector("title")?.textContent || "YouTube Video";
       const link = e.querySelector("link")?.getAttribute("href") || "";
-      const published = e.querySelector("published")?.textContent || "";
-      const v = new URL(link).searchParams.get("v");
+      const v = link ? new URL(link).searchParams.get("v") : null;
       const thumb = v ? `https://img.youtube.com/vi/${v}/hqdefault.jpg` : "";
-      return {title, url:link, date:new Date(published).toLocaleDateString(), thumb};
+      return {title, url:link, thumb};
     });
   }catch(err){
     console.error(err);
@@ -215,7 +214,7 @@ async function fetchYouTubeRSS(){
   }
 }
 
-// Try to enrich titles via YouTube oEmbed (dates not available via oEmbed)
+// Enrich titles via YouTube oEmbed (fixes generic titles)
 async function enrichVideoTitles(videos){
   const enriched = await Promise.all(videos.slice(0,4).map(async (v)=>{
     try{
@@ -235,7 +234,7 @@ async function fetchVideos() {
   grid.innerHTML = "";
 
   try {
-    // Try RSS first if channel ID provided
+    // Try RSS first if channel ID provided (no dates shown)
     const rssVideos = await fetchYouTubeRSS();
     if(rssVideos && rssVideos.length){
       rssVideos.forEach((v, i)=>{
@@ -244,7 +243,6 @@ async function fetchVideos() {
         card.className = "video-card";
         card.innerHTML = `
           <img src="${v.thumb}" alt="">
-          <div class="meta">${v.date}</div>
           <div class="title">${v.title}</div>
         `;
         grid.appendChild(card);
@@ -253,7 +251,7 @@ async function fetchVideos() {
       return;
     }
 
-    // Fallback: parse README
+    // Fallback: parse README and enrich titles
     const res = await fetch(GH_README_RAW);
     if (!res.ok) throw new Error("Failed to load README");
     const text = await res.text();
@@ -264,6 +262,25 @@ async function fetchVideos() {
       grid.innerHTML = `<p>Could not find recent videos in the README. Visit <a href="https://www.youtube.com/c/eleftheriabatsou" target="_blank">YouTube</a>.</p>`;
       return;
     }
+
+    videos.slice(0,4).forEach((v, i) => {
+      const card = document.createElement("a");
+      card.href = v.url;
+      card.target = "_blank";
+      card.rel = "noopener";
+      card.className = "video-card";
+      card.innerHTML = `
+        <img src="${v.thumb}" alt="">
+        <div class="title">${v.title}</div>
+      `;
+      grid.appendChild(card);
+      setTimeout(() => card.classList.add("visible"), 60 * i);
+    });
+  } catch (err) {
+    console.error(err);
+    grid.innerHTML = `<p>Unable to load videos from GitHub README.</p>`;
+  }
+}
 
     videos.slice(0,4).forEach((v, i) => {
       const card = document.createElement("a");
