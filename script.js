@@ -158,60 +158,124 @@ async function renderAboutDetails() {
 
 // Parse recent videos from README using multiple patterns
 function parseVideosFromReadme(readmeText) {
+  // Generic parser: find any markdown links pointing to YouTube and use the link text as title
   const items = [];
-  let regex1 = /\[!\[.*?\]\]\((https:\/\/www\.youtube\.com\/watch\?v=[^)\s]+)\)\s*<br>\s*\[\*\*(.*?)\*\*\]\(\1\)/g;
-  let m1;
-  while ((m1 = regex1.exec(readmeText)) && items.length < 6) {
-    items.push({ url: m1[1], title: m1[2] });
-  }
-  let regex2 = /\[\*\*(.*?)\*\*\]\((https:\/\/www\.youtube\.com\/watch\?v=[^)\s]+)\)/g;
-  let m2;
-  while ((m2 = regex2.exec(readmeText)) && items.length < 6) {
-    items.push({ url: m2[2], title: m2[1] });
-  }
-  // Pattern 2b: standard markdown link [Title](youtube.com/watch?v=..)
-  let regex2b = /\[(.*?)\]\((https:\/\/www\.youtube\.com\/watch\?v=[^)\s]+)\)/g;
-  let m2b;
-  while ((m2b = regex2b.exec(readmeText)) && items.length < 6) {
-    items.push({ url: m2b[2], title: m2b[1] });
-  }
-  let regex3 = /(https:\/\/www\.youtube\.com\/watch\?v=([A-Za-z0-9_-]{6,}))/g;
-  let seen = new Set(items.map(i => i.url));
-  let m3;
-  while ((m3 = regex3.exec(readmeText)) && items.length < 6) {
-    if (!seen.has(m3[1])) {
-      items.push({ url: m3[1], title: "YouTube Video" });
-      seen.add(m3[1]);
+
+  // Patterns covering both youtube.com and youtu.be, with various markdown formats
+  const patterns = [
+    /\[(.*?)\]\((https?:\/\/(?:www\.)?youtube\.com\/watch\?v=[^)\s]+)\)/g, // [Title](https://www.youtube.com/watch?v=...)
+    /\[(.*?)\]\((https?:\/\/youtu\.be\/[A-Za-z0-9_-]+)\)/g,                 // [Title](https://youtu.be/ID)
+    /\[!\[.*?\]\]\((https?:\/\/(?:www\.)?youtube\.com\/watch\?v=[^)\s]+)\)[^\n]*\n\[(.*?)\]\(\1\)/g // image then [Title](same link)
+  ];
+
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(readmeText)) && items.length < 12) {
+      const title = (m[1] || "").trim();
+      const url = m[2];
+      if (title && url) items.push({ title, url });
     }
   }
-  return items.map(i => ({
-    ...i,
-    thumb: `https://img.youtube.com/vi/${new URL(i.url).searchParams.get("v")}/hqdefault.jpg`,
-    date: null
-  }));
+
+  // De-duplicate by URL
+  const seen = new Set();
+  const unique = [];
+  for (const it of items) {
+    if (!seen.has(it.url)) {
+      seen.add(it.url);
+      unique.push(it);
+    }
+  }
+
+  // Infer date near the URL in the README
+  function findDateNear(url) {
+    const idx = readmeText.indexOf(url);
+    if (idx === -1) return "";
+    const context = readmeText.slice(Math.max(0, idx - 160), Math.min(readmeText.length, idx + 160));
+    const patterns = [
+      /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b/i, // Oct 23, 2025
+      /\b\d{4}-\d{2}-\d{2}\b/, // 2025-10-23
+      /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/ // 10/23/2025
+    ];
+    for (const rp of patterns) {
+      const m = context.match(rp);
+      if (m) return m[0];
+    }
+    return "";
+  }
+
+  return unique.slice(0, 4).map((i) => {
+    let vid = "";
+    try {
+      const u = new URL(i.url);
+      vid = u.searchParams.get("v") || (u.pathname.split("/").pop() || "");
+    } catch (_) {}
+    return {
+      title: i.title,
+      url: i.url,
+      thumb: vid ? `https://img.youtube.com/vi/${vid}/hqdefault.jpg` : "",
+      date: findDateNear(i.url)
+    };
+  });
 }
 
-// Optional: YouTube RSS fallback (provide channel ID below to enable)
+// Optional: YouTube RSS (no API key) using channel ID
 const YT_CHANNEL_ID = "UCC-WwYv3DEW7Nkm_IP6VeQQ"; // Eleftheria's channel ID
+
 async function fetchYouTubeRSS(){
   if(!YT_CHANNEL_ID) return null;
-  try{
-    const res = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${YT_CHANNEL_ID}`);
-    if(!res.ok) throw new Error("YouTube RSS error");
-    const text = await res.text();
-    const xml = new DOMParser().parseFromString(text, "application/xml");
-    const entries = Array.from(xml.querySelectorAll("entry")).slice(0,4);
-    return entries.map(e=>{
-      const title = e.querySelector("title")?.textContent || "YouTube Video";
-      const link = e.querySelector("link")?.getAttribute("href") || "";
-      const v = link ? new URL(link).searchParams.get("v") : null;
-      const thumb = v ? `https://img.youtube.com/vi/${v}/hqdefault.jpg` : "";
-      return {title, url:link, thumb};
-    });
-  }catch(err){
-    console.error(err);
-    return null;
+
+  const sources = [
+    // Jina proxy (CORS-friendly)
+    (id)=> `https://r.jina.ai/http://www.youtube.com/feeds/videos.xml?channel_id=${id}`,
+    // Isomorphic-git proxy
+    (id)=> `https://cors.isomorphic-git.org/https://www.youtube.com/feeds/videos.xml?channel_id=${id}`,
+    // AllOrigins proxy
+    (id)=> `https://api.allorigins.win/raw?url=${encodeURIComponent('https://www.youtube.com/feeds/videos.xml?channel_id=' + id)}`
+  ];
+
+  for (const makeUrl of sources) {
+    const url = makeUrl(YT_CHANNEL_ID);
+    try{
+      const res = await fetch(url);
+      if(!res.ok) throw new Error(`YouTube RSS error via ${url}`);
+      const text = await res.text();
+
+      // Parse RSS/Atom XML
+      const xml = new DOMParser().parseFromString(text, "application/xml");
+      const entries = Array.from(xml.getElementsByTagName("entry")).slice(0,4);
+      if (!entries.length) continue;
+
+      const videos = entries.map(e=>{
+        const title = e.getElementsByTagName("title")[0]?.textContent || "YouTube Video";
+        // Prefer link rel="alternate"
+        let linkUrl = "";
+        const links = Array.from(e.getElementsByTagName("link"));
+        const altLink = links.find(l => (l.getAttribute("rel") || "") === "alternate");
+        linkUrl = altLink ? altLink.getAttribute("href") : (links[0]?.getAttribute("href") || "");
+
+        const published = e.getElementsByTagName("published")[0]?.textContent || "";
+        const date = published ? new Date(published).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}) : "";
+
+        // Derive video ID for thumbnail
+        let vId = "";
+        try {
+          const u = new URL(linkUrl);
+          vId = u.searchParams.get("v") || (u.pathname.split("/").pop() || "");
+        } catch(_) {}
+        const thumb = vId ? `https://img.youtube.com/vi/${vId}/hqdefault.jpg` : "";
+
+        return {title, url: linkUrl, thumb, date};
+      });
+
+      if (videos.length) return videos;
+    }catch(err){
+      console.warn('RSS fetch failed:', err.message);
+      // try next source
+    }
   }
+
+  return null;
 }
 
 async function fetchVideos() {
@@ -219,17 +283,26 @@ async function fetchVideos() {
   grid.innerHTML = "";
 
   try {
-    // Try RSS first if channel ID provided (titles only, no dates)
+    // Prefer RSS for title and date
     const rssVideos = await fetchYouTubeRSS();
     if(rssVideos && rssVideos.length){
-      rssVideos.forEach((v, i)=>{
-        const card = document.createElement("a");
-        card.href = v.url; card.target = "_blank"; card.rel = "noopener";
+      rssVideos.slice(0,4).forEach((v, i)=>{
+        const card = document.createElement("div");
         card.className = "video-card";
-        card.innerHTML = `
-          <img src="${v.thumb}" alt="">
-          <div class="title">${v.title}</div>
+
+        const thumbLink = document.createElement("a");
+        thumbLink.href = v.url; thumbLink.target = "_blank"; thumbLink.rel = "noopener";
+        thumbLink.innerHTML = `<img src="${v.thumb}" alt="${v.title}">`;
+
+        const info = document.createElement("div");
+        info.className = "video-info";
+        info.innerHTML = `
+          <a class="video-title" href="${v.url}" target="_blank" rel="noopener">${v.title}</a>
+          <div class="video-meta">${v.date || ""}</div>
         `;
+
+        card.appendChild(thumbLink);
+        card.appendChild(info);
         grid.appendChild(card);
         setTimeout(()=>card.classList.add("visible"), 60*i);
       });
@@ -248,15 +321,22 @@ async function fetchVideos() {
     }
 
     videos.slice(0,4).forEach((v, i) => {
-      const card = document.createElement("a");
-      card.href = v.url;
-      card.target = "_blank";
-      card.rel = "noopener";
+      const card = document.createElement("div");
       card.className = "video-card";
-      card.innerHTML = `
-        <img src="${v.thumb}" alt="">
-        <div class="title">${v.title}</div>
+
+      const thumbLink = document.createElement("a");
+      thumbLink.href = v.url; thumbLink.target = "_blank"; thumbLink.rel = "noopener";
+      thumbLink.innerHTML = `<img src="${v.thumb}" alt="${v.title}">`;
+
+      const info = document.createElement("div");
+      info.className = "video-info";
+      info.innerHTML = `
+        <a class="video-title" href="${v.url}" target="_blank" rel="noopener">${v.title}</a>
+        <div class="video-meta">${v.date || ""}</div>
       `;
+
+      card.appendChild(thumbLink);
+      card.appendChild(info);
       grid.appendChild(card);
       setTimeout(() => card.classList.add("visible"), 60 * i);
     });
@@ -585,6 +665,8 @@ function revealOnScroll(selector){
   },{threshold:0.15});
   els.forEach(el=>io.observe(el));
 }
+
+
 
 async function init() {
   initPanels();
