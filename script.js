@@ -204,9 +204,10 @@ async function fetchYouTubeRSS(){
     return entries.map(e=>{
       const title = e.querySelector("title")?.textContent || "YouTube Video";
       const link = e.querySelector("link")?.getAttribute("href") || "";
-      const v = link ? new URL(link).searchParams.get("v") : null;
+      const published = e.querySelector("published")?.textContent || "";
+      const v = new URL(link).searchParams.get("v");
       const thumb = v ? `https://img.youtube.com/vi/${v}/hqdefault.jpg` : "";
-      return {title, url:link, thumb};
+      return {title, url:link, date:new Date(published).toLocaleDateString(), thumb};
     });
   }catch(err){
     console.error(err);
@@ -214,27 +215,12 @@ async function fetchYouTubeRSS(){
   }
 }
 
-// Enrich titles via YouTube oEmbed (fixes generic titles)
-async function enrichVideoTitles(videos){
-  const enriched = await Promise.all(videos.slice(0,4).map(async (v)=>{
-    try{
-      const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(v.url)}&format=json`);
-      if(res.ok){
-        const data = await res.json();
-        v.title = data.title || v.title;
-      }
-    }catch(e){ /* ignore */ }
-    return v;
-  }));
-  return enriched;
-}
-
 async function fetchVideos() {
   const grid = document.getElementById("videos-grid");
   grid.innerHTML = "";
 
   try {
-    // Try RSS first if channel ID provided (no dates shown)
+    // Try RSS first if channel ID provided
     const rssVideos = await fetchYouTubeRSS();
     if(rssVideos && rssVideos.length){
       rssVideos.forEach((v, i)=>{
@@ -243,6 +229,7 @@ async function fetchVideos() {
         card.className = "video-card";
         card.innerHTML = `
           <img src="${v.thumb}" alt="">
+          <div class="meta">${v.date}</div>
           <div class="title">${v.title}</div>
         `;
         grid.appendChild(card);
@@ -251,36 +238,16 @@ async function fetchVideos() {
       return;
     }
 
-    // Fallback: parse README and enrich titles
+    // Fallback: parse README
     const res = await fetch(GH_README_RAW);
     if (!res.ok) throw new Error("Failed to load README");
     const text = await res.text();
-    let videos = parseVideosFromReadme(text);
-    videos = await enrichVideoTitles(videos);
+    const videos = parseVideosFromReadme(text);
 
     if (videos.length === 0) {
       grid.innerHTML = `<p>Could not find recent videos in the README. Visit <a href="https://www.youtube.com/c/eleftheriabatsou" target="_blank">YouTube</a>.</p>`;
       return;
     }
-
-    videos.slice(0,4).forEach((v, i) => {
-      const card = document.createElement("a");
-      card.href = v.url;
-      card.target = "_blank";
-      card.rel = "noopener";
-      card.className = "video-card";
-      card.innerHTML = `
-        <img src="${v.thumb}" alt="">
-        <div class="title">${v.title}</div>
-      `;
-      grid.appendChild(card);
-      setTimeout(() => card.classList.add("visible"), 60 * i);
-    });
-  } catch (err) {
-    console.error(err);
-    grid.innerHTML = `<p>Unable to load videos from GitHub README.</p>`;
-  }
-}
 
     videos.slice(0,4).forEach((v, i) => {
       const card = document.createElement("a");
@@ -493,38 +460,6 @@ function renderGlobePins(talks){
   });
 }
 
-// Globe map fallbacks
-const MAP_SOURCES = [
-  "https://upload.wikimedia.org/wikipedia/commons/5/51/BlankMap-World-v2.png",
-  "https://upload.wikimedia.org/wikipedia/commons/8/80/Mercator_projection_SW.jpg"
-];
-
-function preloadImage(url){
-  return new Promise((resolve, reject)=>{
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = ()=> resolve(url);
-    img.onerror = ()=> reject(new Error("Image load failed"));
-    img.src = url;
-  });
-}
-
-async function ensureGlobeMap(){
-  const globeEl = document.getElementById("globe");
-  for(const url of MAP_SOURCES){
-    try{
-      const ok = await preloadImage(url);
-      globeEl.style.backgroundImage = `url('${ok}')`;
-      globeEl.style.backgroundRepeat = "repeat-x";
-      globeEl.style.backgroundSize = "auto 100%";
-      globeEl.style.backgroundPosition = `${currentGlobeOffset}px center`;
-      return true;
-    }catch(e){}
-  }
-  globeEl.style.backgroundImage = "none";
-  return false;
-}
-
 // Drag-to-rotate globe horizontally with inertia
 let currentGlobeOffset = 0;
 let inertiaVelocity = 0;
@@ -628,7 +563,6 @@ async function renderSpeaking() {
       setTimeout(() => item.classList.add("visible"), 80 * i);
     });
 
-    await ensureGlobeMap();
     renderGlobePins(recent);
     enableGlobeDrag();
 
