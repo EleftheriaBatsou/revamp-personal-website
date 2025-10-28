@@ -379,7 +379,8 @@ async function fetchHashnodeRSS() {
       source: "Hashnode",
     }));
   } catch (err) {
-    console.error(err);
+    // Network or CORS issue; skip Hashnode and continue silently
+    console.warn("Hashnode RSS unavailable:", err?.message || err);
     return [];
   }
 }
@@ -418,11 +419,11 @@ async function renderArticles() {
 function parseSpeakingFromReadme(readmeText) {
   const start = readmeText.indexOf("Sometimes I speak at conferences");
   if (start === -1) return [];
-  const slice = readmeText.slice(start, start + 6000);
+  const slice = readmeText.slice(start, start + 20000); // expand window to capture more items
   const bulletRegex = /-\s*\[(.*?)\]\((https?:\/\/[^\)]+)\).*?/g;
   const items = [];
   let match;
-  while ((match = bulletRegex.exec(slice)) && items.length < 20) {
+  while ((match = bulletRegex.exec(slice)) && items.length < 100) {
     items.push({ title: match[1], url: match[2] });
   }
   return items;
@@ -456,7 +457,31 @@ const COUNTRY_COORDS = {
   "Ukraine": [49.0, 32.0],
   "Netherlands": [52.1, 5.3],
   "Italy": [42.8, 12.5],
-  "Latvia": [57.0, 25.0]
+  "Latvia": [57.0, 25.0],
+  "South Africa": [-28.7, 24.7]
+};
+
+// Capital cities (lat, lon) used when no specific city is mentioned
+const CAPITAL_COORDS = {
+  "Croatia": [45.8150, 15.9819],         // Zagreb
+  "Portugal": [38.7223, -9.1393],        // Lisbon
+  "Poland": [52.2297, 21.0122],          // Warsaw
+  "Greece": [37.9838, 23.7275],          // Athens
+  "Serbia": [44.7866, 20.4489],          // Belgrade
+  "Germany": [52.5200, 13.4050],         // Berlin
+  "United Kingdom": [51.5074, -0.1278],  // London
+  "Lithuania": [54.6872, 25.2797],       // Vilnius
+  "Romania": [44.4268, 26.1025],         // Bucharest
+  "Bosnia and Herzegovina": [43.8564, 18.4131], // Sarajevo
+  "Denmark": [55.6761, 12.5683],         // Copenhagen
+  "Belgium": [50.8503, 4.3517],          // Brussels
+  "Norway": [59.9139, 10.7522],          // Oslo
+  "Israel": [31.7683, 35.2137],          // Jerusalem
+  "Ukraine": [50.4501, 30.5234],         // Kyiv
+  "Netherlands": [52.3676, 4.9041],      // Amsterdam
+  "Italy": [41.9028, 12.4964],           // Rome
+  "Latvia": [56.9496, 24.1052],          // Riga
+  "South Africa": [-25.7479, 28.2293]    // Pretoria
 };
 
 // City-level coordinates for known events (lat, lon)
@@ -494,124 +519,207 @@ const CITY_COORDS = {
   "Greece": [39.0, 22.0]
 };
 
-// Convert lat/lon to position on Mercator background box
-function latLonToXY(lat, lon, width, height, offsetX=0){
-  const x = ((lon + 180) / 360) * width + offsetX;
-  const y = (height/2) - (height / (2*Math.PI)) * Math.log(Math.tan(Math.PI/4 + (lat*Math.PI/180)/2));
-  return {x, y};
-}
+// Country aliases normalization to handle README variations
+const COUNTRY_ALIASES = {
+  "UK": "United Kingdom",
+  "U.K.": "United Kingdom",
+  "Holland": "Netherlands",
+  "Portuguese": "Portugal",
+  "Bosnia & Herzegovina": "Bosnia and Herzegovina"
+};
 
-function findCoordsFromTitle(title){
-  for(const city in CITY_COORDS){
-    if(title.toLowerCase().includes(city.toLowerCase())){
-      return CITY_COORDS[city];
+// City aliases to catch common misspellings/variants
+const CITY_ALIASES = {
+  "san fransicsco": "San Francisco",
+  "san francisco": "San Francisco",
+  "gdansk": "Gdańsk",
+  "odesa": "Odessa"
+};
+
+// D3 globe with draggable rotation, wheel zoom, and pins
+async function renderD3Globe(talks){
+  const globeEl = document.getElementById("globe");
+  if (!globeEl) return;
+  globeEl.innerHTML = ""; // clear
+
+  const w = globeEl.clientWidth || 280;
+  const h = globeEl.clientHeight || 280;
+
+  const svg = d3.select(globeEl).append("svg").attr("width", w).attr("height", h);
+
+  // World map
+  let worldFc;
+  try {
+    const res = await fetch("https://unpkg.com/world-atlas@2/countries-110m.json");
+    const topo = await res.json();
+    worldFc = topojson.feature(topo, topo.objects.countries);
+  } catch (err) {
+    console.warn("World atlas fetch failed:", err);
+    worldFc = { type: "FeatureCollection", features: [] };
+  }
+
+  // Projection
+  const projection = d3.geoMercator().fitExtent([[8,8],[w-8,h-8]], worldFc);
+  const baseScale = projection.scale();
+  projection.scale(baseScale * 2.3); // strong initial zoom for Europe detail (closer to previous feel)
+  const path = d3.geoPath(projection);
+
+  // Background
+  svg.append("rect").attr("x",0).attr("y",0).attr("width",w).attr("height",h).attr("fill","#0a0a0a");
+
+  // Land
+  const land = svg.append("g")
+    .selectAll("path")
+    .data(worldFc.features)
+    .join("path")
+    .attr("d", path)
+    .attr("fill", "#2e7db8")
+    .attr("stroke", "#000")
+    .attr("stroke-width", 1.2);
+
+  // Graticule
+  const graticule = d3.geoGraticule();
+  const grat = svg.append("path")
+    .datum(graticule())
+    .attr("d", path)
+    .attr("fill", "none")
+    .attr("stroke", "#000")
+    .attr("stroke-opacity", 0.2);
+
+  // Tooltip
+  const tooltip = document.createElement("div");
+  tooltip.className = "globe-tooltip";
+  globeEl.appendChild(tooltip);
+
+  // Normalize country names
+  function normalizeCountry(name){
+    if(!name) return null;
+    const trimmed = name.trim();
+    return COUNTRY_ALIASES[trimmed] || trimmed;
+  }
+
+  function coordsFromTitle(title){
+    let lower = title.toLowerCase();
+
+    // apply city alias normalization in text for matching
+    for(const alias in CITY_ALIASES){
+      if(lower.includes(alias)){
+        const canonical = CITY_ALIASES[alias];
+        lower = lower.replace(alias, canonical.toLowerCase());
+      }
     }
-  }
-  const country = extractCountry(title);
-  if(country && COUNTRY_COORDS[country]) return COUNTRY_COORDS[country];
-  return null;
-}
 
-function renderGlobePins(talks){
-  const pinsEl = document.getElementById("globe-pins");
-  const globeEl = document.getElementById("globe");
-  pinsEl.innerHTML = "";
-  const rect = globeEl.getBoundingClientRect();
-  const w = rect.width, h = rect.height;
-
-  talks.forEach((t)=>{
-    const coords = findCoordsFromTitle(t.title);
-    if(!coords) return;
-    const {x, y} = latLonToXY(coords[0], coords[1], w, h, currentGlobeOffset);
-    const pin = document.createElement("div");
-    pin.className = "pin";
-    pin.setAttribute("data-title", t.title);
-    pin.setAttribute("data-url", t.url);
-    pin.style.left = `${((x % w) + w) % w}px`;
-    pin.style.top = `${Math.max(8, Math.min(h-8, y))}px`;
-    pin.addEventListener("click", ()=>{
-      const url = pin.getAttribute("data-url");
-      if(url) window.open(url, "_blank");
-    });
-    pinsEl.appendChild(pin);
-  });
-}
-
-// Drag-to-rotate globe horizontally with inertia
-let currentGlobeOffset = 0;
-let inertiaVelocity = 0;
-let inertiaRAF = null;
-
-function enableGlobeDrag(){
-  const globeEl = document.getElementById("globe");
-  let dragging = false;
-  let lastX = 0;
-  let lastTime = 0;
-
-  function onMouseDown(e){
-    dragging = true; lastX = e.clientX; lastTime = performance.now();
-    cancelInertia();
-  }
-  function onMouseMove(e){
-    if(!dragging) return;
-    const now = performance.now();
-    const dx = e.clientX - lastX;
-    const dt = now - lastTime;
-    lastX = e.clientX; lastTime = now;
-    currentGlobeOffset += dx;
-    inertiaVelocity = dx / Math.max(dt, 16) * 16; // px per frame approx
-    globeEl.style.backgroundPosition = `${currentGlobeOffset}px center`;
-    if(latestTalksForPins.length) renderGlobePins(latestTalksForPins);
-  }
-  function onMouseUp(){
-    dragging = false;
-    startInertia();
-  }
-
-  globeEl.addEventListener("mousedown", onMouseDown);
-  window.addEventListener("mousemove", onMouseMove);
-  window.addEventListener("mouseup", onMouseUp);
-
-  // Touch
-  globeEl.addEventListener("touchstart", (e)=>{
-    dragging = true; lastX = e.touches[0].clientX; lastTime = performance.now();
-    cancelInertia();
-  }, {passive:true});
-  window.addEventListener("touchmove", (e)=>{
-    if(!dragging) return;
-    const now = performance.now();
-    const dx = e.touches[0].clientX - lastX;
-    const dt = now - lastTime;
-    lastX = e.touches[0].clientX; lastTime = now;
-    currentGlobeOffset += dx;
-    inertiaVelocity = dx / Math.max(dt, 16) * 16;
-    globeEl.style.backgroundPosition = `${currentGlobeOffset}px center`;
-    if(latestTalksForPins.length) renderGlobePins(latestTalksForPins);
-  }, {passive:true});
-  window.addEventListener("touchend", ()=>{
-    dragging = false;
-    startInertia();
-  });
-}
-
-function startInertia(){
-  cancelInertia();
-  const globeEl = document.getElementById("globe");
-  function step(){
-    // friction
-    inertiaVelocity *= 0.95;
-    if(Math.abs(inertiaVelocity) < 0.2){
-      cancelInertia(); return;
+    // city match first
+    for(const city in CITY_COORDS){
+      if(lower.includes(city.toLowerCase())){
+        return CITY_COORDS[city];
+      }
     }
-    currentGlobeOffset += inertiaVelocity;
-    globeEl.style.backgroundPosition = `${currentGlobeOffset}px center`;
-    if(latestTalksForPins.length) renderGlobePins(latestTalksForPins);
-    inertiaRAF = requestAnimationFrame(step);
+    // country from "in X"
+    const rawCountry = extractCountry(title);
+    const norm = normalizeCountry(rawCountry);
+    if(norm && CAPITAL_COORDS[norm]) return CAPITAL_COORDS[norm];
+    if(norm && COUNTRY_COORDS[norm]) return COUNTRY_COORDS[norm];
+    // any country text present
+    for(const countryName in COUNTRY_COORDS){
+      if(lower.includes(countryName.toLowerCase())){
+        return CAPITAL_COORDS[countryName] || COUNTRY_COORDS[countryName];
+      }
+    }
+    return null;
   }
-  inertiaRAF = requestAnimationFrame(step);
-}
-function cancelInertia(){
-  if(inertiaRAF){ cancelAnimationFrame(inertiaRAF); inertiaRAF = null; }
+
+  // Baseline countries to always show (capitals), derived from your list
+  const DISPLAY_COUNTRIES = [
+    "Croatia","Portugal","Poland","Greece","Serbia","Germany","United Kingdom",
+    "Lithuania","Romania","Bosnia and Herzegovina","Denmark","Belgium","Norway",
+    "Israel","Ukraine","Netherlands","Italy","Latvia","South Africa"
+  ];
+  const BASELINE_CITY_PINS = ["San Francisco"]; // ensure USA presence via city
+
+  const baselinePins = [];
+  DISPLAY_COUNTRIES.forEach(country=>{
+    const coords = CAPITAL_COORDS[country] || COUNTRY_COORDS[country];
+    if (coords) baselinePins.push({ talk: { title: country, url: "#" }, coords });
+  });
+  BASELINE_CITY_PINS.forEach(city=>{
+    const coords = CITY_COORDS[city];
+    if (coords) baselinePins.push({ talk: { title: city, url: "#" }, coords });
+  });
+
+  // Talks-derived pins
+  const talkPins = talks.map(t => ({ talk: t, coords: coordsFromTitle(t.title) })).filter(d => d.coords);
+
+  // Merge and de-duplicate by coordinates + title
+  const seen = new Set();
+  const pinData = [];
+  [...baselinePins, ...talkPins].forEach(d=>{
+    const key = `${d.talk.title}|${d.coords[0]},${d.coords[1]}`;
+    if(!seen.has(key)){
+      seen.add(key);
+      pinData.push(d);
+    }
+  });
+
+  const pins = svg.append("g")
+    .selectAll("circle")
+    .data(pinData, d => d.talk.title)
+    .join("circle")
+    .attr("r", 5)
+    .attr("fill", "#ff3b3b")
+    .attr("stroke", "#000")
+    .attr("stroke-width", 2)
+    .attr("cx", d => projection([d.coords[1], d.coords[0]])[0])
+    .attr("cy", d => projection([d.coords[1], d.coords[0]])[1])
+    .style("cursor", "pointer");
+
+  pins.on("click", (_, d) => {
+    const url = d.talk.url || "#";
+    if(url && url !== "#") window.open(url, "_blank");
+  });
+  pins.on("mouseenter", (_, d) => {
+    tooltip.textContent = d.talk.title;
+    tooltip.style.opacity = "1";
+  });
+  pins.on("mousemove", (event) => {
+    const rect = globeEl.getBoundingClientRect();
+    tooltip.style.left = `${event.clientX - rect.left + 10}px`;
+    tooltip.style.top = `${event.clientY - rect.top + 10}px`;
+  });
+  pins.on("mouseleave", () => {
+    tooltip.style.opacity = "0";
+  });
+
+  // Drag rotate (horizontal and vertical; tuned to feel like previous version)
+  let rotateX = 0;
+  let rotateY = 0;
+  const drag = d3.drag().on("drag", (event) => {
+    rotateX += (event.dx / w) * 360;    // left/right
+    rotateY += (event.dy / h) * 120;    // up/down, gentler than before
+    rotateY = Math.max(-60, Math.min(60, rotateY)); // clamp tilt
+    projection.rotate([rotateX, rotateY]);
+    land.attr("d", path);
+    grat.attr("d", path);
+    pins.attr("cx", d => projection([d.coords[1], d.coords[0]])[0])
+        .attr("cy", d => projection([d.coords[1], d.coords[0]])[1]);
+  });
+  svg.call(drag);
+
+  // Wheel zoom (expanded max for deeper Europe zoom)
+  const minScale = baseScale * 1.2;
+  const maxScale = baseScale * 8.0;
+  svg.on("wheel", (event) => {
+    event.preventDefault();
+    const delta = -event.deltaY;
+    const factor = delta > 0 ? 1.1 : 0.92;
+    let next = projection.scale() * factor;
+    next = Math.max(minScale, Math.min(maxScale, next));
+    projection.scale(next);
+    land.attr("d", path);
+    grat.attr("d", path);
+    pins.attr("cx", d => projection([d.coords[1], d.coords[0]])[0])
+        .attr("cy", d => projection([d.coords[1], d.coords[0]])[1]);
+  }, { passive: false });
 }
 
 let latestTalksForPins = [];
@@ -625,13 +733,15 @@ async function renderSpeaking() {
     if (!res.ok) throw new Error("README load error");
     const text = await res.text();
     const talks = parseSpeakingFromReadme(text);
+
     if (talks.length === 0) {
       container.innerHTML = "<div class='timeline-item left'>See GitHub README for full speaking list.</div>";
+      await renderD3Globe([]);
       return;
     }
-    const recent = talks.slice(0, 6);
-    latestTalksForPins = recent;
 
+    // Show recent 6 in timeline
+    const recent = talks.slice(0, 6);
     recent.forEach((t, i) => {
       const item = document.createElement("div");
       item.className = "timeline-item " + (i % 2 === 0 ? "left" : "right");
@@ -640,12 +750,13 @@ async function renderSpeaking() {
       setTimeout(() => item.classList.add("visible"), 80 * i);
     });
 
-    renderGlobePins(recent);
-    enableGlobeDrag();
+    latestTalksForPins = talks;
+    await renderD3Globe(talks);
 
   } catch (err) {
     console.error(err);
     container.innerHTML = "<div class='timeline-item left'>Unable to load speaking data.</div>";
+    await renderD3Globe([]);
   }
 }
 

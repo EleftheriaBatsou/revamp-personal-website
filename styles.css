@@ -198,26 +198,22 @@ html,body{
 .timeline-item.right::after{left:-33px}
 .timeline-item.visible{transform:translateY(0); opacity:1}
 
-/* Globe */
+/* Globe (D3-rendered) */
 .globe{
+  position:relative;
   width:280px; height:280px; border-radius:50%;
   border:3px solid #000; box-shadow:0 8px 0 #0003; overflow:hidden;
   background-color:#0a0a0a;
-  background-image:url('https://upload.wikimedia.org/wikipedia/commons/5/51/BlankMap-World-v2.png');
-  background-size:auto 100%; background-position:0 center; background-repeat:repeat-x;
+}
+/* Tooltip for D3 pins */
+.globe-tooltip{
+  position:absolute; left:0; top:0;
+  background:#000; color:#fff; font-size:12px; padding:6px 8px;
+  border:2px solid #fff; border-radius:8px; white-space:nowrap;
+  pointer-events:none; opacity:0; transition:opacity .12s ease;
+  z-index:5;
 }
 .globe:active{cursor:grabbing}
-.pins{position:relative; width:100%; height:100%}
-.pin{
-  position:absolute; width:14px; height:14px; background:#ff3b3b; border:2px solid #000; border-radius:50%;
-  transform:translate(-50%, -100%); box-shadow:0 2px 0 #0004; z-index:2;
-}
-.pin::after{
-  content:attr(data-title); position:absolute; top:-30px; left:50%; transform:translateX(-50%);
-  background:#000; color:#fff; font-size:12px; padding:6px 8px; border:2px solid #fff; border-radius:8px;
-  white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .15s ease, transform .15s ease;
-}
-.pin:hover::after{opacity:1; transform:translateX(-50%) translateY(-3px)}
 .globe-note{color:#eee; font-size:12px}
 
 /* Links */
