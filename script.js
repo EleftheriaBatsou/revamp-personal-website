@@ -666,7 +666,24 @@ function revealOnScroll(selector){
   els.forEach(el=>io.observe(el));
 }
 
-
+function initFooterVisibility(){
+  const footer = document.querySelector(".footer");
+  const backdrop = document.querySelector(".footer-backdrop");
+  if(!footer) return;
+  function update(){
+    const reachedBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 4;
+    if(reachedBottom){
+      footer.classList.add("visible");
+      if(backdrop) backdrop.classList.add("visible");
+    } else {
+      footer.classList.remove("visible");
+      if(backdrop) backdrop.classList.remove("visible");
+    }
+  }
+  window.addEventListener("scroll", update, {passive:true});
+  window.addEventListener("resize", update);
+  update();
+}
 
 async function init() {
   initPanels();
@@ -676,6 +693,7 @@ async function init() {
   await renderArticles();
   await renderSpeaking();
   revealOnScroll(".video-card, .article-item");
+  initFooterVisibility();
 }
 
 document.addEventListener("DOMContentLoaded", init);
